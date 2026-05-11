@@ -33,7 +33,7 @@ python fpo.py --mode train
 # 3. Verify trained checkpoints
 ls ./llama_fpo_baseline_weights/
 ls ./llama_fpo_practical_weights/
-ls ./llama_fpo_theoretical_weights/
+ls ./llama_fpo_relaxed_weights/
 
 # 4. Generate model outputs
 # No API cost
@@ -114,8 +114,8 @@ lm_eval \
 # Relaxed
 lm_eval \
   --model hf \
-  --model_args pretrained=meta-llama/Llama-3.2-1B-Instruct,peft=./llama_fpo_theoretical_weights,dtype=bfloat16 \
+  --model_args pretrained=meta-llama/Llama-3.2-1B-Instruct,peft=./llama_fpo_relaxed_weights,dtype=bfloat16 \
   --tasks mmlu,arc_challenge \
   --device cuda \
   --batch_size 64 \
-  --output_path ./eval_results_theoretical
+  --output_path ./eval_results_relaxed
