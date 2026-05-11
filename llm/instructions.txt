@@ -1,0 +1,121 @@
+# ===================================================================
+# API setup
+# ===================================================================
+
+# Windows (PowerShell)
+$env:HF_TOKEN="your_hf_key"
+$env:TOGETHER_API_KEY="your_together_api_key"
+
+# Linux / macOS
+export HF_TOKEN="your_hf_key"
+export TOGETHER_API_KEY="your_together_api_key"
+
+
+# ===================================================================
+# Option 1 — Run the full pipeline
+# ===================================================================
+# This runs training, generation, and evaluation sequentially.
+
+python fpo.py --mode all
+
+
+# ===================================================================
+# Option 2 — Run each stage separately (recommended)
+# ===================================================================
+
+# 1. Dry run (recommended sanity check)
+python fpo.py --mode all --dry-run
+
+# 2. Training
+# Longest step, no API cost.
+python fpo.py --mode train
+
+# 3. Verify trained checkpoints
+ls ./llama_fpo_baseline_weights/
+ls ./llama_fpo_practical_weights/
+ls ./llama_fpo_theoretical_weights/
+
+# 4. Generate model outputs
+# No API cost
+python fpo.py --mode generate
+
+# 5. Verify generations
+python -c "import json; d=json.load(open('truthfulqa_generations.json')); print(len(d['prompts']), len(d['answers_baseline']))"
+
+# 6. Run evaluation
+# Uses API calls.
+python fpo.py --mode evaluate
+
+
+# ===================================================================
+# Print final evaluation results
+# ===================================================================
+
+python -c "
+import pandas as pd
+
+df = pd.read_csv('fpo_final_results_3way.csv')
+
+print('\n--- BASELINE VS PRACTICAL ---')
+print(pd.crosstab(
+    df['Category'],
+    df['Win_Base_v_Prac'],
+    margins=True,
+    margins_name='Total'
+).to_string())
+
+print('\n--- BASELINE VS RELAXED ---')
+print(pd.crosstab(
+    df['Category'],
+    df['Win_Base_v_Rel'],
+    margins=True,
+    margins_name='Total'
+).to_string())
+
+print('\n--- RELAXED VS PRACTICAL ---')
+print(pd.crosstab(
+    df['Category'],
+    df['Win_Rel_v_Prac'],
+    margins=True,
+    margins_name='Total'
+).to_string())
+
+print('\nVerbosity check:')
+print('Baseline: {:.1f} words'.format(df['Len_Base'].mean()))
+print('Practical: {:.1f} words'.format(df['Len_Prac'].mean()))
+print('Relaxed: {:.1f} words'.format(df['Len_Rel'].mean()))
+"
+
+
+# ===================================================================
+# MMLU / ARC evaluation
+# ===================================================================
+
+pip install lm-eval[hf]
+
+# Baseline
+lm_eval \
+  --model hf \
+  --model_args pretrained=meta-llama/Llama-3.2-1B-Instruct,peft=./llama_fpo_baseline_weights,dtype=bfloat16 \
+  --tasks mmlu,arc_challenge \
+  --device cuda \
+  --batch_size 64 \
+  --output_path ./eval_results_baseline
+
+# Practical
+lm_eval \
+  --model hf \
+  --model_args pretrained=meta-llama/Llama-3.2-1B-Instruct,peft=./llama_fpo_practical_weights,dtype=bfloat16 \
+  --tasks mmlu,arc_challenge \
+  --device cuda \
+  --batch_size 64 \
+  --output_path ./eval_results_practical
+
+# Relaxed
+lm_eval \
+  --model hf \
+  --model_args pretrained=meta-llama/Llama-3.2-1B-Instruct,peft=./llama_fpo_theoretical_weights,dtype=bfloat16 \
+  --tasks mmlu,arc_challenge \
+  --device cuda \
+  --batch_size 64 \
+  --output_path ./eval_results_theoretical
